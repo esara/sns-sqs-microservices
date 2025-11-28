@@ -9,6 +9,7 @@ import json
 import boto3
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
+from prometheus_client import Counter, Histogram, start_http_server
 
 # AWS Configuration
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
@@ -22,31 +23,40 @@ sqs_client = boto3.client(
     endpoint_url=AWS_ENDPOINT_URL
 )
 
+# Prometheus metrics
+messages_received = Counter('sqs_messages_received_total', 'Total number of messages received from SQS', ['queue'])
+notifications_sent = Counter('notifications_sent_total', 'Total number of notifications successfully sent', ['queue'])
+notifications_failed = Counter('notifications_failed_total', 'Total number of failed notification attempts', ['queue'])
+notification_duration = Histogram('notification_duration_seconds', 'Time spent sending notifications', ['queue'])
+
 def send_notification(order):
     """Send notification for an order"""
-    try:
-        customer_id = order['customer_id']
-        order_id = order['order_id']
-        total = order['total_amount']
-        
-        print(f"  📧 Sending notification to customer {customer_id}")
-        print(f"     Subject: Order Confirmation - {order_id}")
-        print(f"     Body: Your order for ${total:.2f} has been received")
-        print(f"     Items: {', '.join(order['items'])}")
-        
-        # Simulate notification sending
-        notification = {
-            'to': f"{customer_id}@example.com",
-            'subject': f"Order Confirmation - {order_id}",
-            'body': f"Thank you for your order! Order ID: {order_id}, Total: ${total:.2f}",
-            'sent_at': datetime.now(timezone.utc).isoformat()
-        }
-        
-        print(f"     ✅ Notification sent successfully")
-        return True
-    except Exception as e:
-        print(f"  ❌ Error sending notification: {e}")
-        return False
+    with notification_duration.labels(queue='notification').time():
+        try:
+            customer_id = order['customer_id']
+            order_id = order['order_id']
+            total = order['total_amount']
+            
+            print(f"  📧 Sending notification to customer {customer_id}")
+            print(f"     Subject: Order Confirmation - {order_id}")
+            print(f"     Body: Your order for ${total:.2f} has been received")
+            print(f"     Items: {', '.join(order['items'])}")
+            
+            # Simulate notification sending
+            notification = {
+                'to': f"{customer_id}@example.com",
+                'subject': f"Order Confirmation - {order_id}",
+                'body': f"Thank you for your order! Order ID: {order_id}, Total: ${total:.2f}",
+                'sent_at': datetime.now(timezone.utc).isoformat()
+            }
+            
+            print(f"     ✅ Notification sent successfully")
+            notifications_sent.labels(queue='notification').inc()
+            return True
+        except Exception as e:
+            print(f"  ❌ Error sending notification: {e}")
+            notifications_failed.labels(queue='notification').inc()
+            return False
 
 def receive_messages(queue_url, max_messages=1, wait_time=20):
     """Receive messages from SQS queue"""
@@ -75,6 +85,11 @@ def delete_message(queue_url, receipt_handle):
         return False
 
 def main():
+    # Start metrics server on port 8000
+    metrics_port = int(os.getenv('METRICS_PORT', '8000'))
+    start_http_server(metrics_port)
+    print(f"Metrics server started on port {metrics_port}")
+    
     print("=" * 60)
     print("Consumer Service 2: Notification Service")
     print("=" * 60)
@@ -93,6 +108,7 @@ def main():
             if messages:
                 for message in messages:
                     message_count += 1
+                    messages_received.labels(queue='notification').inc()
                     print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Received message #{message_count}")
                     
                     # Extract message body (SNS messages are wrapped in SQS)

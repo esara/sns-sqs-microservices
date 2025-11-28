@@ -29,6 +29,9 @@ spec:
       - name: notification
         image: "{{ .Values.imageRegistry }}/{{ .Values.notification.image.repository }}:{{ .Values.notification.image.tag }}"
         imagePullPolicy: {{ .Values.notification.image.pullPolicy }}
+        ports:
+        - name: metrics
+          containerPort: 8000
         env:
         - name: PYTHONUNBUFFERED
           value: "1"

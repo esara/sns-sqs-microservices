@@ -1,0 +1,27 @@
+{{- if .Values.notification.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification
+  labels:
+    {{- if .Values.labels }}
+    {{- toYaml .Values.labels | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: notification
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 8000
+    targetPort: metrics
+  selector:
+    {{- if .Values.selectorLabels }}
+    {{- toYaml .Values.selectorLabels | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: notification
+{{- end }}
+

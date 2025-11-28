@@ -30,6 +30,9 @@ spec:
       - name: producer
         image: "{{ .Values.imageRegistry }}/{{ .Values.producer.image.repository }}:{{ .Values.producer.image.tag }}"
         imagePullPolicy: {{ .Values.producer.image.pullPolicy }}
+        ports:
+        - name: metrics
+          containerPort: 8000
         env:
         - name: PYTHONUNBUFFERED
           value: "1"

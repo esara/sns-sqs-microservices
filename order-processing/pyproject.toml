@@ -5,6 +5,7 @@ description = "Consumer service 1 (Order Processing) for SNS/SQS microservices d
 requires-python = ">=3.14"
 dependencies = [
     "boto3==1.41.5",
+    "prometheus-client==0.21.0",
 ]
 
 [build-system]

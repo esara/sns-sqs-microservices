@@ -5,9 +5,11 @@ Producer Service - Publishes messages to AWS SNS topic
 import os
 import json
 import time
+import threading
 import boto3
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
+from prometheus_client import Counter, Histogram, start_http_server
 
 # AWS Configuration
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
@@ -21,18 +23,26 @@ sns_client = boto3.client(
     endpoint_url=AWS_ENDPOINT_URL
 )
 
+# Prometheus metrics
+messages_published = Counter('sns_messages_published_total', 'Total number of messages published to SNS')
+messages_failed = Counter('sns_messages_failed_total', 'Total number of failed message publications')
+publish_duration = Histogram('sns_publish_duration_seconds', 'Time spent publishing messages to SNS')
+
 def publish_message(topic_arn, message_body, message_attributes=None):
     """Publish a message to SNS topic"""
-    try:
-        response = sns_client.publish(
-            TopicArn=topic_arn,
-            Message=json.dumps(message_body),
-            MessageAttributes=message_attributes or {}
-        )
-        return response['MessageId']
-    except ClientError as e:
-        print(f"Error publishing message: {e}")
-        return None
+    with publish_duration.time():
+        try:
+            response = sns_client.publish(
+                TopicArn=topic_arn,
+                Message=json.dumps(message_body),
+                MessageAttributes=message_attributes or {}
+            )
+            messages_published.inc()
+            return response['MessageId']
+        except ClientError as e:
+            print(f"Error publishing message: {e}")
+            messages_failed.inc()
+            return None
 
 def create_order_message(order_id, customer_id, items, total_amount):
     """Create a sample order message"""
@@ -46,6 +56,11 @@ def create_order_message(order_id, customer_id, items, total_amount):
     }
 
 def main():
+    # Start metrics server on port 8000
+    metrics_port = int(os.getenv('METRICS_PORT', '8000'))
+    start_http_server(metrics_port)
+    print(f"Metrics server started on port {metrics_port}")
+    
     print(f"Producer Service starting...")
     print(f"SNS Topic ARN: {SNS_TOPIC_ARN}")
     print(f"AWS Endpoint: {AWS_ENDPOINT_URL or 'AWS Cloud'}")

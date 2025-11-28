@@ -29,6 +29,9 @@ spec:
       - name: order-processing
         image: "{{ .Values.imageRegistry }}/{{ .Values.orderProcessing.image.repository }}:{{ .Values.orderProcessing.image.tag }}"
         imagePullPolicy: {{ .Values.orderProcessing.image.pullPolicy }}
+        ports:
+        - name: metrics
+          containerPort: 8000
         env:
         - name: PYTHONUNBUFFERED
           value: "1"
