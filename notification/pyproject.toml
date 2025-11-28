@@ -6,6 +6,8 @@ requires-python = ">=3.14"
 dependencies = [
     "boto3==1.41.5",
     "prometheus-client==0.21.0",
+    "opentelemetry-distro",
+    "opentelemetry-exporter-otlp",
 ]
 
 [build-system]
