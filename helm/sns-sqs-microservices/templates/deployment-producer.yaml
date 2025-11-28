@@ -46,6 +46,18 @@ spec:
             configMapKeyRef:
               name: sns-sqs-config
               key: SNS_TOPIC_ARN
+        {{- if .Values.otlp.enabled }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.otlp.endpoint }}
+        {{- if .Values.otlp.insecure }}
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: {{ .Values.otlp.insecure | quote }}
+        {{- end }}
+        {{- if .Values.otlp.headers }}
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          value: {{ .Values.otlp.headers | quote }}
+        {{- end }}
+        {{- end }}
         resources:
           {{- toYaml .Values.producer.deployment.resources | nindent 10 }}
       restartPolicy: Always

@@ -156,6 +156,13 @@ aws:
     orderProcessingQueueUrl: "https://sqs.us-east-2.amazonaws.com/040365544943/order-processing-queue"
     notificationQueueUrl: "https://sqs.us-east-2.amazonaws.com/040365544943/notification-queue"
 
+# OpenTelemetry configuration
+otlp:
+  enabled: false
+  endpoint: "http://opentelemetry-collector:4318"
+  insecure: "true"
+  # headers: "key1=value1,key2=value2"
+
 # Labels and annotations
 # Only include these if you want to add labels/selectors
 # labels:
