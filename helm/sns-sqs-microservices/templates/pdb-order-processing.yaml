@@ -1,0 +1,22 @@
+{{- if .Values.orderProcessing.enabled }}
+{{- if .Values.orderProcessing.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: order-processing-pdb
+  labels:
+    {{- if .Values.labels }}
+    {{- toYaml .Values.labels | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: order-processing
+spec:
+  minAvailable: {{ .Values.orderProcessing.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- if .Values.selectorLabels }}
+      {{- toYaml .Values.selectorLabels | nindent 6 }}
+      {{- end }}
+      app.kubernetes.io/component: order-processing
+{{- end }}
+{{- end }}
+

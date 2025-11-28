@@ -1,0 +1,488 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "CloudFormation template to create SNS topic, SQS queues, subscriptions, and IAM policies for SNS/SQS microservices application",
+  "Parameters": {
+    "AWSAccountId": {
+      "Type": "String",
+      "Description": "AWS Account ID",
+      "Default": "040365544943"
+    },
+    "AWSRegion": {
+      "Type": "String",
+      "Description": "AWS Region",
+      "Default": "us-east-2"
+    },
+    "SNSTopicName": {
+      "Type": "String",
+      "Description": "Name of the SNS topic",
+      "Default": "orders-topic"
+    },
+    "OrderProcessingQueueName": {
+      "Type": "String",
+      "Description": "Name of the order processing SQS queue",
+      "Default": "order-processing-queue"
+    },
+    "NotificationQueueName": {
+      "Type": "String",
+      "Description": "Name of the notification SQS queue",
+      "Default": "notification-queue"
+    },
+    "OIDCProviderId": {
+      "Type": "String",
+      "Description": "OIDC Provider ID for EKS cluster (extract from: aws eks describe-cluster --name CLUSTER_NAME --query 'cluster.identity.oidc.issuer' --output text | cut -d '/' -f 5)",
+      "Default": "814146EE69A6FEFEC74A0867957AFA6C"
+    },
+    "KubernetesNamespace": {
+      "Type": "String",
+      "Description": "Kubernetes namespace for service accounts",
+      "Default": "sns-sqs-microservices"
+    }
+  },
+  "Resources": {
+    "SNSTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": {
+          "Ref": "SNSTopicName"
+        },
+        "DisplayName": "Orders Topic"
+      }
+    },
+    "OrderProcessingQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "QueueName": {
+          "Ref": "OrderProcessingQueueName"
+        },
+        "VisibilityTimeout": 30,
+        "MessageRetentionPeriod": 345600
+      }
+    },
+    "NotificationQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "QueueName": {
+          "Ref": "NotificationQueueName"
+        },
+        "VisibilityTimeout": 30,
+        "MessageRetentionPeriod": 345600
+      }
+    },
+    "OrderProcessingQueuePolicy": {
+      "Type": "AWS::SQS::QueuePolicy",
+      "Properties": {
+        "Queues": [
+          {
+            "Ref": "OrderProcessingQueue"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "sns.amazonaws.com"
+              },
+              "Action": "sqs:SendMessage",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "OrderProcessingQueue",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "ArnEquals": {
+                  "aws:SourceArn": {
+                    "Ref": "SNSTopic"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "NotificationQueuePolicy": {
+      "Type": "AWS::SQS::QueuePolicy",
+      "Properties": {
+        "Queues": [
+          {
+            "Ref": "NotificationQueue"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "sns.amazonaws.com"
+              },
+              "Action": "sqs:SendMessage",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "NotificationQueue",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "ArnEquals": {
+                  "aws:SourceArn": {
+                    "Ref": "SNSTopic"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "OrderProcessingSubscription": {
+      "Type": "AWS::SNS::Subscription",
+      "Properties": {
+        "TopicArn": {
+          "Ref": "SNSTopic"
+        },
+        "Protocol": "sqs",
+        "Endpoint": {
+          "Fn::GetAtt": [
+            "OrderProcessingQueue",
+            "Arn"
+          ]
+        }
+      },
+      "DependsOn": [
+        "OrderProcessingQueuePolicy"
+      ]
+    },
+    "NotificationSubscription": {
+      "Type": "AWS::SNS::Subscription",
+      "Properties": {
+        "TopicArn": {
+          "Ref": "SNSTopic"
+        },
+        "Protocol": "sqs",
+        "Endpoint": {
+          "Fn::GetAtt": [
+            "NotificationQueue",
+            "Arn"
+          ]
+        }
+      },
+      "DependsOn": [
+        "NotificationQueuePolicy"
+      ]
+    },
+    "ProducerIAMPolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "ManagedPolicyName": "SNS-SQS-Producer-Policy",
+        "Description": "Policy for producer service to publish to SNS",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AllowSNSPublish",
+              "Effect": "Allow",
+              "Action": [
+                "sns:Publish"
+              ],
+              "Resource": {
+                "Ref": "SNSTopic"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "OrderProcessingIAMPolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "ManagedPolicyName": "SNS-SQS-Order-Processing-Policy",
+        "Description": "Policy for order-processing service to consume from SQS",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AllowSQSReceiveAndDelete",
+              "Effect": "Allow",
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes",
+                "sqs:GetQueueUrl"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "OrderProcessingQueue",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "NotificationIAMPolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "ManagedPolicyName": "SNS-SQS-Notification-Policy",
+        "Description": "Policy for notification service to consume from SQS",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AllowSQSReceiveAndDelete",
+              "Effect": "Allow",
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes",
+                "sqs:GetQueueUrl"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "NotificationQueue",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ProducerIAMRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "sns-sqs-producer-role",
+        "AssumeRolePolicyDocument": {
+          "Fn::Sub": [
+            "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":\"arn:aws:iam::${AWSAccountId}:oidc-provider/oidc.eks.${AWSRegion}.amazonaws.com/id/${OIDCProviderId}\"},\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"oidc.eks.${AWSRegion}.amazonaws.com/id/${OIDCProviderId}:sub\":\"system:serviceaccount:${KubernetesNamespace}:producer-service-account\",\"oidc.eks.${AWSRegion}.amazonaws.com/id/${OIDCProviderId}:aud\":\"sts.amazonaws.com\"}}}]}",
+            {
+              "AWSAccountId": {
+                "Ref": "AWSAccountId"
+              },
+              "AWSRegion": {
+                "Ref": "AWSRegion"
+              },
+              "OIDCProviderId": {
+                "Ref": "OIDCProviderId"
+              },
+              "KubernetesNamespace": {
+                "Ref": "KubernetesNamespace"
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Ref": "ProducerIAMPolicy"
+          }
+        ],
+        "Description": "IAM role for producer service account (IRSA)"
+      }
+    },
+    "OrderProcessingIAMRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "sns-sqs-order-processing-role",
+        "AssumeRolePolicyDocument": {
+          "Fn::Sub": [
+            "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":\"arn:aws:iam::${AWSAccountId}:oidc-provider/oidc.eks.${AWSRegion}.amazonaws.com/id/${OIDCProviderId}\"},\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"oidc.eks.${AWSRegion}.amazonaws.com/id/${OIDCProviderId}:sub\":\"system:serviceaccount:${KubernetesNamespace}:order-processing-service-account\",\"oidc.eks.${AWSRegion}.amazonaws.com/id/${OIDCProviderId}:aud\":\"sts.amazonaws.com\"}}}]}",
+            {
+              "AWSAccountId": {
+                "Ref": "AWSAccountId"
+              },
+              "AWSRegion": {
+                "Ref": "AWSRegion"
+              },
+              "OIDCProviderId": {
+                "Ref": "OIDCProviderId"
+              },
+              "KubernetesNamespace": {
+                "Ref": "KubernetesNamespace"
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Ref": "OrderProcessingIAMPolicy"
+          }
+        ],
+        "Description": "IAM role for order-processing service account (IRSA)"
+      }
+    },
+    "NotificationIAMRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "sns-sqs-notification-role",
+        "AssumeRolePolicyDocument": {
+          "Fn::Sub": [
+            "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":\"arn:aws:iam::${AWSAccountId}:oidc-provider/oidc.eks.${AWSRegion}.amazonaws.com/id/${OIDCProviderId}\"},\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"oidc.eks.${AWSRegion}.amazonaws.com/id/${OIDCProviderId}:sub\":\"system:serviceaccount:${KubernetesNamespace}:notification-service-account\",\"oidc.eks.${AWSRegion}.amazonaws.com/id/${OIDCProviderId}:aud\":\"sts.amazonaws.com\"}}}]}",
+            {
+              "AWSAccountId": {
+                "Ref": "AWSAccountId"
+              },
+              "AWSRegion": {
+                "Ref": "AWSRegion"
+              },
+              "OIDCProviderId": {
+                "Ref": "OIDCProviderId"
+              },
+              "KubernetesNamespace": {
+                "Ref": "KubernetesNamespace"
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Ref": "NotificationIAMPolicy"
+          }
+        ],
+        "Description": "IAM role for notification service account (IRSA)"
+      }
+    }
+  },
+  "Outputs": {
+    "SNSTopicArn": {
+      "Description": "ARN of the SNS topic",
+      "Value": {
+        "Ref": "SNSTopic"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-SNSTopicArn"
+        }
+      }
+    },
+    "OrderProcessingQueueUrl": {
+      "Description": "URL of the order processing SQS queue",
+      "Value": {
+        "Ref": "OrderProcessingQueue"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-OrderProcessingQueueUrl"
+        }
+      }
+    },
+    "OrderProcessingQueueArn": {
+      "Description": "ARN of the order processing SQS queue",
+      "Value": {
+        "Fn::GetAtt": [
+          "OrderProcessingQueue",
+          "Arn"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-OrderProcessingQueueArn"
+        }
+      }
+    },
+    "NotificationQueueUrl": {
+      "Description": "URL of the notification SQS queue",
+      "Value": {
+        "Ref": "NotificationQueue"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-NotificationQueueUrl"
+        }
+      }
+    },
+    "NotificationQueueArn": {
+      "Description": "ARN of the notification SQS queue",
+      "Value": {
+        "Fn::GetAtt": [
+          "NotificationQueue",
+          "Arn"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-NotificationQueueArn"
+        }
+      }
+    },
+    "ProducerIAMPolicyArn": {
+      "Description": "ARN of the Producer IAM Managed Policy",
+      "Value": {
+        "Ref": "ProducerIAMPolicy"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-ProducerIAMPolicyArn"
+        }
+      }
+    },
+    "OrderProcessingIAMPolicyArn": {
+      "Description": "ARN of the Order Processing IAM Managed Policy",
+      "Value": {
+        "Ref": "OrderProcessingIAMPolicy"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-OrderProcessingIAMPolicyArn"
+        }
+      }
+    },
+    "NotificationIAMPolicyArn": {
+      "Description": "ARN of the Notification IAM Managed Policy",
+      "Value": {
+        "Ref": "NotificationIAMPolicy"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-NotificationIAMPolicyArn"
+        }
+      }
+    },
+    "ProducerIAMRoleArn": {
+      "Description": "ARN of the Producer IAM Role for IRSA",
+      "Value": {
+        "Fn::GetAtt": [
+          "ProducerIAMRole",
+          "Arn"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-ProducerIAMRoleArn"
+        }
+      }
+    },
+    "OrderProcessingIAMRoleArn": {
+      "Description": "ARN of the Order Processing IAM Role for IRSA",
+      "Value": {
+        "Fn::GetAtt": [
+          "OrderProcessingIAMRole",
+          "Arn"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-OrderProcessingIAMRoleArn"
+        }
+      }
+    },
+    "NotificationIAMRoleArn": {
+      "Description": "ARN of the Notification IAM Role for IRSA",
+      "Value": {
+        "Fn::GetAtt": [
+          "NotificationIAMRole",
+          "Arn"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-NotificationIAMRoleArn"
+        }
+      }
+    }
+  }
+}
+

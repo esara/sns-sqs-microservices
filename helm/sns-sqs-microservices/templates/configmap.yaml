@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sns-sqs-config
+  {{- if .Values.labels }}
+  labels:
+    {{- toYaml .Values.labels | nindent 4 }}
+  {{- end }}
+data:
+  AWS_REGION: {{ .Values.global.aws.region | quote }}
+  SNS_TOPIC_ARN: {{ .Values.aws.sns.topicArn | quote }}
+  SQS_QUEUE_1_URL: {{ .Values.aws.sqs.orderProcessingQueueUrl | quote }}
+  SQS_QUEUE_2_URL: {{ .Values.aws.sqs.notificationQueueUrl | quote }}
+

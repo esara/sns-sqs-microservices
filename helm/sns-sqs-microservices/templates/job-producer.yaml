@@ -1,0 +1,45 @@
+{{- if .Values.producer.enabled }}
+{{- if .Values.producer.job.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: producer-job
+  labels:
+    {{- if .Values.labels }}
+    {{- toYaml .Values.labels | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: producer
+spec:
+  backoffLimit: {{ .Values.producer.job.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- if .Values.labels }}
+        {{- toYaml .Values.labels | nindent 8 }}
+        {{- end }}
+        app.kubernetes.io/component: producer
+    spec:
+      serviceAccountName: {{ .Values.producer.serviceAccount.name }}
+      containers:
+      - name: producer
+        image: "{{ .Values.imageRegistry }}/{{ .Values.producer.image.repository }}:{{ .Values.producer.image.tag }}"
+        imagePullPolicy: {{ .Values.producer.image.pullPolicy }}
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: sns-sqs-config
+              key: AWS_REGION
+        - name: SNS_TOPIC_ARN
+          valueFrom:
+            configMapKeyRef:
+              name: sns-sqs-config
+              key: SNS_TOPIC_ARN
+        resources:
+          {{- toYaml .Values.producer.deployment.resources | nindent 10 }}
+      restartPolicy: Never
+{{- end }}
+{{- end }}
+

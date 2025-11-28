@@ -1,0 +1,161 @@
+# Multi-architecture build support (arm64 + x86_64)
+# To build and push multi-arch images to Docker Hub:
+#   export DOCKERHUB_USERNAME=your-username
+#   export IMAGE_TAG=latest
+#   docker buildx create --use
+#   docker compose buildx build --platform linux/amd64,linux/arm64 --push
+#
+# For local development (single arch):
+#   docker compose build
+#   docker compose up
+
+services:
+  # LocalStack - AWS service emulator
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - SERVICES=sns,sqs,cloudformation,iam
+      - DEBUG=1
+      - PERSISTENCE=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "./localstack-data:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sns-sqs-network
+
+  # Setup service - creates AWS resources using CloudFormation
+  setup:
+    image: amazon/aws-cli:latest
+    container_name: setup
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-2
+      - AWS_ENDPOINT_URL=http://localstack:4566
+    volumes:
+      - "./scripts:/scripts"
+    networks:
+      - sns-sqs-network
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for LocalStack to be ready..."
+        sleep 5
+        echo "Creating CloudFormation stack..."
+        # Check if stack already exists
+        if aws --endpoint-url=http://localstack:4566 cloudformation describe-stacks \
+          --stack-name sns-sqs-microservices &>/dev/null; then
+          echo "Stack already exists, waiting for it to be ready..."
+        else
+          echo "Creating new stack..."
+          aws --endpoint-url=http://localstack:4566 cloudformation create-stack \
+            --stack-name sns-sqs-microservices \
+            --template-body file:///scripts/sns-sqs-resources.json \
+            --parameters ParameterKey=AWSAccountId,ParameterValue=000000000000 \
+                         ParameterKey=AWSRegion,ParameterValue=us-east-2
+        fi
+        # Wait for stack to be in CREATE_COMPLETE or UPDATE_COMPLETE state
+        echo "Waiting for stack creation to complete..."
+        while true; do
+          STATUS=$$(aws --endpoint-url=http://localstack:4566 cloudformation describe-stacks \
+            --stack-name sns-sqs-microservices \
+            --query 'Stacks[0].StackStatus' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          echo "Stack status: $$STATUS"
+          if [ "$$STATUS" = "CREATE_COMPLETE" ] || [ "$$STATUS" = "UPDATE_COMPLETE" ]; then
+            echo "Stack is ready!"
+            break
+          elif [ "$$STATUS" = "CREATE_FAILED" ] || [ "$$STATUS" = "ROLLBACK_COMPLETE" ] || [ "$$STATUS" = "UPDATE_ROLLBACK_COMPLETE" ]; then
+            echo "Stack creation failed with status: $$STATUS"
+            exit 1
+          fi
+          sleep 2
+        done
+        echo "Setup complete!"
+
+  # Producer service - publishes messages to SNS
+  producer:
+    build:
+      context: ./producer
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: ${DOCKERHUB_USERNAME:-esara}/sns-sqs-producer:${IMAGE_TAG:-latest}
+    container_name: producer
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    environment:
+      - AWS_REGION=us-east-2
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - SNS_TOPIC_ARN=arn:aws:sns:us-east-2:000000000000:orders-topic
+    networks:
+      - sns-sqs-network
+    restart: "no"
+
+  # Order Processing Service
+  order-processing:
+    build:
+      context: ./order-processing
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: ${DOCKERHUB_USERNAME:-esara}/sns-sqs-order-processing:${IMAGE_TAG:-latest}
+    container_name: order-processing
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    environment:
+      - AWS_REGION=us-east-2
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/order-processing-queue
+    networks:
+      - sns-sqs-network
+    restart: unless-stopped
+
+  # Notification Service
+  notification:
+    build:
+      context: ./notification
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: ${DOCKERHUB_USERNAME:-esara}/sns-sqs-notification:${IMAGE_TAG:-latest}
+    container_name: notification
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    environment:
+      - AWS_REGION=us-east-2
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/notification-queue
+    networks:
+      - sns-sqs-network
+    restart: unless-stopped
+
+networks:
+  sns-sqs-network:
+    driver: bridge
+
+volumes:
+  localstack-data:
+

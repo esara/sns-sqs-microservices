@@ -1,0 +1,49 @@
+{{- if .Values.orderProcessing.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-processing
+  labels:
+    {{- if .Values.labels }}
+    {{- toYaml .Values.labels | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: order-processing
+spec:
+  replicas: {{ .Values.orderProcessing.deployment.replicas }}
+  selector:
+    matchLabels:
+      {{- if .Values.selectorLabels }}
+      {{- toYaml .Values.selectorLabels | nindent 6 }}
+      {{- end }}
+      app.kubernetes.io/component: order-processing
+  template:
+    metadata:
+      labels:
+        {{- if .Values.labels }}
+        {{- toYaml .Values.labels | nindent 8 }}
+        {{- end }}
+        app.kubernetes.io/component: order-processing
+    spec:
+      serviceAccountName: {{ .Values.orderProcessing.serviceAccount.name }}
+      containers:
+      - name: order-processing
+        image: "{{ .Values.imageRegistry }}/{{ .Values.orderProcessing.image.repository }}:{{ .Values.orderProcessing.image.tag }}"
+        imagePullPolicy: {{ .Values.orderProcessing.image.pullPolicy }}
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: sns-sqs-config
+              key: AWS_REGION
+        - name: SQS_QUEUE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: sns-sqs-config
+              key: SQS_QUEUE_1_URL
+        resources:
+          {{- toYaml .Values.orderProcessing.deployment.resources | nindent 10 }}
+      restartPolicy: Always
+{{- end }}
+
