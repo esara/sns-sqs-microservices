@@ -1,0 +1,19 @@
+{
+  "name": "sns-sqs-order-processing",
+  "version": "1.0.0",
+  "description": "Order processing consumer for SNS/SQS microservices demo",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node app.js",
+    "start:otel": "node --import ./instrumentation.js app.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.700.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.52.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.57.0",
+    "@opentelemetry/sdk-node": "^0.57.0",
+    "prom-client": "^15.1.0"
+  }
+}

@@ -25,8 +25,6 @@ spec:
         image: "{{ .Values.imageRegistry }}/{{ .Values.producer.image.repository }}:{{ .Values.producer.image.tag }}"
         imagePullPolicy: {{ .Values.producer.image.pullPolicy }}
         env:
-        - name: PYTHONUNBUFFERED
-          value: "1"
         - name: AWS_REGION
           valueFrom:
             configMapKeyRef:
@@ -37,6 +35,24 @@ spec:
             configMapKeyRef:
               name: sns-sqs-config
               key: SNS_TOPIC_ARN
+        - name: OTEL_SERVICE_NAME
+          value: producer
+        - name: OTEL_TRACES_EXPORTER
+          value: otlp
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: http/protobuf
+        {{- if .Values.otlp.enabled }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.otlp.endpoint }}
+        {{- if .Values.otlp.insecure }}
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: {{ .Values.otlp.insecure | quote }}
+        {{- end }}
+        {{- if .Values.otlp.headers }}
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          value: {{ .Values.otlp.headers | quote }}
+        {{- end }}
+        {{- end }}
         resources:
           {{- toYaml .Values.producer.deployment.resources | nindent 10 }}
       restartPolicy: Never

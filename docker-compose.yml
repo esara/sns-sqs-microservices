@@ -93,7 +93,7 @@ services:
       platforms:
         - linux/amd64
         - linux/arm64
-    image: ${DOCKERHUB_USERNAME:-esara}/sns-sqs-producer:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME:-esara}/sns-sqs-producer:${IMAGE_TAG:-nodejs}
     container_name: producer
     depends_on:
       setup:
@@ -104,6 +104,10 @@ services:
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
       - SNS_TOPIC_ARN=arn:aws:sns:us-east-2:000000000000:orders-topic
+      # OpenTelemetry (optional: set OTEL_EXPORTER_OTLP_ENDPOINT to send traces)
+      - OTEL_SERVICE_NAME=producer
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
     networks:
       - sns-sqs-network
     restart: "no"
@@ -115,7 +119,7 @@ services:
       platforms:
         - linux/amd64
         - linux/arm64
-    image: ${DOCKERHUB_USERNAME:-esara}/sns-sqs-order-processing:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME:-esara}/sns-sqs-order-processing:${IMAGE_TAG:-nodejs}
     container_name: order-processing
     depends_on:
       setup:
@@ -126,6 +130,10 @@ services:
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
       - SQS_QUEUE_URL=http://localstack:4566/000000000000/order-processing-queue
+      # OpenTelemetry (optional: set OTEL_EXPORTER_OTLP_ENDPOINT to send traces)
+      - OTEL_SERVICE_NAME=order-processing
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
     networks:
       - sns-sqs-network
     restart: unless-stopped
@@ -137,7 +145,7 @@ services:
       platforms:
         - linux/amd64
         - linux/arm64
-    image: ${DOCKERHUB_USERNAME:-esara}/sns-sqs-notification:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME:-esara}/sns-sqs-notification:${IMAGE_TAG:-nodejs}
     container_name: notification
     depends_on:
       setup:
@@ -148,6 +156,10 @@ services:
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
       - SQS_QUEUE_URL=http://localstack:4566/000000000000/notification-queue
+      # OpenTelemetry (optional: set OTEL_EXPORTER_OTLP_ENDPOINT to send traces)
+      - OTEL_SERVICE_NAME=notification
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
     networks:
       - sns-sqs-network
     restart: unless-stopped

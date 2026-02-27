@@ -124,9 +124,12 @@ You should see:
 
 ## Services Details
 
+All microservices are implemented in **Node.js 25** using the AWS SDK v3, expose Prometheus metrics on port 8000, and use **OpenTelemetry** trace auto-instrumentation (OTLP HTTP). Set `OTEL_EXPORTER_OTLP_ENDPOINT` to send traces to a collector.
+
 ### Producer Service
 
 - **Location**: `producer/`
+- **Runtime**: Node.js 25
 - **Function**: Publishes order messages to SNS topic
 - **Messages**: Creates 5 sample orders with customer info, items, and totals
 - **Message Attributes**: Includes order type and priority for filtering
@@ -134,6 +137,7 @@ You should see:
 ### Order Processing Service
 
 - **Location**: `order-processing/`
+- **Runtime**: Node.js 25
 - **Function**: Processes orders from the queue
 - **Actions**: 
   - Receives order messages
@@ -143,6 +147,7 @@ You should see:
 ### Notification Service
 
 - **Location**: `notification/`
+- **Runtime**: Node.js 25
 - **Function**: Sends notifications for orders
 - **Actions**:
   - Receives order messages

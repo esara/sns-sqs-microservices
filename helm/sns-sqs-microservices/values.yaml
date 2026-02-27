@@ -16,7 +16,7 @@ producer:
   enabled: true
   image:
     repository: esara/sns-sqs-producer
-    tag: latest
+    tag: nodejs
     pullPolicy: Always
   
   serviceAccount:
@@ -46,7 +46,7 @@ orderProcessing:
   enabled: true
   image:
     repository: esara/sns-sqs-order-processing
-    tag: latest
+    tag: nodejs
     pullPolicy: Always
   
   serviceAccount:
@@ -99,7 +99,7 @@ notification:
   enabled: true
   image:
     repository: esara/sns-sqs-notification
-    tag: latest
+    tag: nodejs
     pullPolicy: Always
   
   serviceAccount:

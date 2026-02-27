@@ -6,7 +6,7 @@ set -e
 
 # Configuration
 DOCKERHUB_USERNAME=${DOCKERHUB_USERNAME:-esara}
-IMAGE_TAG=${IMAGE_TAG:-latest}
+IMAGE_TAG=${IMAGE_TAG:-nodejs}
 PLATFORMS=${PLATFORMS:-"linux/amd64,linux/arm64"}
 
 # Colors for output

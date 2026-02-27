@@ -1,15 +1,10 @@
-FROM python:3.14-slim
+FROM node:25-alpine
 
 WORKDIR /app
 
-# Install uv
-RUN pip install --no-cache-dir uv
+COPY package.json ./
+RUN npm install --omit=dev
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --no-install-project
-RUN uv run opentelemetry-bootstrap -a requirements | uv pip install --requirement -
+COPY instrumentation.js app.js ./
 
-COPY app.py .
-
-CMD ["uv", "run", "opentelemetry-instrument", "--traces_exporter", "otlp", "--exporter_otlp_protocol", "http/protobuf", "--service_name", "notification", "python", "app.py"]
-
+CMD ["node", "--import", "./instrumentation.js", "app.js"]

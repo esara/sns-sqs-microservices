@@ -14,7 +14,7 @@ build-multiarch: ## Build and push multi-architecture images (arm64 + x86) to Do
 		export DOCKERHUB_USERNAME=esara; \
 	fi
 	@if [ -z "$$IMAGE_TAG" ]; then \
-		export IMAGE_TAG=latest; \
+		export IMAGE_TAG=nodejs; \
 	fi
 #	docker buildx create --use --name multiarch 2>/dev/null || docker buildx use multiarch
 #	docker buildx inspect --bootstrap

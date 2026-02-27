@@ -33,8 +33,6 @@ spec:
         - name: metrics
           containerPort: 8000
         env:
-        - name: PYTHONUNBUFFERED
-          value: "1"
         - name: AWS_REGION
           valueFrom:
             configMapKeyRef:
@@ -45,6 +43,12 @@ spec:
             configMapKeyRef:
               name: sns-sqs-config
               key: SQS_QUEUE_1_URL
+        - name: OTEL_SERVICE_NAME
+          value: order-processing
+        - name: OTEL_TRACES_EXPORTER
+          value: otlp
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: http/protobuf
         {{- if .Values.otlp.enabled }}
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: {{ .Values.otlp.endpoint }}
